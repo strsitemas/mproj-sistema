@@ -1,0 +1,2155 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum StatusEmpresa {
+  ATIVA
+  SUSPENSA
+  ARQUIVADA
+}
+
+enum StatusUsuario {
+  ATIVO
+  BLOQUEADO
+  DESATIVADO
+}
+
+enum StatusVinculo {
+  ATIVO
+  SUSPENSO
+  ENCERRADO
+}
+
+// Cadastro da organização que utiliza o sistema.
+model Empresa {
+  id            String        @id @default(uuid()) @db.Uuid
+  nome          String        @db.VarChar(160)
+  slug          String        @unique @db.VarChar(100)
+  status        StatusEmpresa @default(ATIVA)
+  fusoHorario   String        @default("America/Sao_Paulo") @db.VarChar(80)
+  versao        Int           @default(1)
+  criadoEm      DateTime      @default(now()) @db.Timestamptz(3)
+  atualizadoEm  DateTime      @updatedAt @db.Timestamptz(3)
+  arquivadoEm   DateTime?     @db.Timestamptz(3)
+
+  vinculos VinculoEmpresa[]
+  perfis Perfil[]
+  modulos EmpresaModulo[]
+  eventosAuditoria EventoAuditoria[]
+  clientes Cliente[]
+  contratos Contrato[]
+  projetos Projeto[]
+  recursos Recurso[]
+  periodosHoras PeriodoHoras[]
+  categoriasFinanceiras CategoriaFinanceira[]
+  centrosCusto CentroCusto[]
+  fornecedores Fornecedor[]
+  titulosFinanceiros TituloFinanceiro[]
+  contasFinanceiras ContaFinanceira[]
+  politicasAprovacao PoliticaAprovacao[]
+  solicitacoesAprovacao SolicitacaoAprovacao[]
+}
+
+// Identidade de login; não representa automaticamente um recurso humano.
+model Usuario {
+  id              String        @id @default(uuid()) @db.Uuid
+  nome            String        @db.VarChar(160)
+  emailNormalizado String       @unique @db.VarChar(254)
+  senhaHash       String        @db.VarChar(255)
+  status          StatusUsuario @default(ATIVO)
+  emailVerificadoEm DateTime?   @db.Timestamptz(3)
+  versaoSessao    Int           @default(1)
+  versao          Int           @default(1)
+  criadoEm        DateTime      @default(now()) @db.Timestamptz(3)
+  atualizadoEm    DateTime      @updatedAt @db.Timestamptz(3)
+
+  vinculos VinculoEmpresa[]
+}
+
+// Participação do usuário em uma empresa.
+// Perfis e escopos serão associados a este vínculo.
+model VinculoEmpresa {
+  id           String        @id @default(uuid()) @db.Uuid
+  empresaId    String        @db.Uuid
+  usuarioId    String        @db.Uuid
+  status       StatusVinculo @default(ATIVO)
+  versao       Int           @default(1)
+  criadoEm     DateTime      @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime      @updatedAt @db.Timestamptz(3)
+  encerradoEm  DateTime?     @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  sessoes Sessao[]
+  perfis AtribuicaoPerfil[]
+
+  @@unique([empresaId, usuarioId])
+  @@unique([empresaId, id])
+  @@index([usuarioId, status])
+  @@index([empresaId, status])
+  eventosAuditoria EventoAuditoria[]
+  participacoesProjeto ParticipacaoProjeto[]
+  entregaveisResponsavel Entregavel[] @relation("ResponsavelEntregavel")
+  submissoesEntregavel SubmissaoEntregavel[] @relation("AutorSubmissaoEntregavel")
+  avaliacoesEntregavel AvaliacaoEntregavel[] @relation("AvaliadorEntregavel")
+  versoesDocumento VersaoDocumento[] @relation("AutorVersaoDocumento")
+  reunioesRegistradas Reuniao[] @relation("RegistradorReuniao")
+  participacoesReuniao ParticipanteReuniao[] @relation("ParticipanteInternoReuniao")
+  atasRedigidas VersaoAta[] @relation("AutorAta")
+  avaliacoesAta AvaliacaoAta[] @relation("AvaliadorAta")
+  recursoPessoa Recurso?
+  horasLancadas ApontamentoHoras[] @relation("AutorApontamentoHoras")
+  avaliacoesHoras AvaliacaoHoras[] @relation("AvaliadorHoras")
+  periodosHorasFechados PeriodoHoras[] @relation("ResponsavelFechamentoHoras")
+  ajustesHorasSolicitados AjusteHoras[] @relation("SolicitanteAjusteHoras")
+  avaliacoesAjusteHoras AvaliacaoAjusteHoras[] @relation("AvaliadorAjusteHoras")
+  orcamentosCriados OrcamentoProjeto[] @relation("AutorOrcamentoProjeto")
+  orcamentosAprovados OrcamentoProjeto[] @relation("AprovadorOrcamentoProjeto")
+  titulosCriados TituloFinanceiro[] @relation("AutorTituloFinanceiro")
+  liquidacoesRegistradas LiquidacaoFinanceira[] @relation("AutorLiquidacaoFinanceira")
+  estornosRegistrados EstornoLiquidacaoFinanceira[] @relation("AutorEstornoLiquidacaoFinanceira")
+  aberturasSaldoRegistradas AberturaSaldoConta[] @relation("AutorAberturaSaldo")
+  estornosAberturaSaldo EstornoAberturaSaldo[] @relation("AutorEstornoAberturaSaldo")
+  transferenciasRegistradas TransferenciaFinanceira[] @relation("AutorTransferenciaFinanceira")
+  estornosTransferencia EstornoTransferenciaFinanceira[] @relation("AutorEstornoTransferenciaFinanceira")
+  politicasAprovacaoCriadas PoliticaAprovacao[] @relation("AutorPoliticaAprovacao")
+  politicasAprovacaoPublicadas PoliticaAprovacao[] @relation("PublicadorPoliticaAprovacao")
+  aprovacoesSolicitadas SolicitacaoAprovacao[] @relation("AutorSolicitacaoAprovacao")
+  pareceresAprovacao ParecerAprovacao[] @relation("AutorParecerAprovacao")
+  recuperacoesAcesso RecuperacaoAcesso[]
+}
+
+// O token original fica no cookie; somente seu hash fica no banco.
+// Cada sessão pertence a um vínculo e a uma empresa específica.
+model Sessao {
+  id                   String    @id @default(uuid()) @db.Uuid
+  empresaId            String    @db.Uuid
+  vinculoId            String    @db.Uuid
+  tokenHash            String    @unique @db.VarChar(64)
+  versaoSessaoNaEmissao Int
+  criadoEm             DateTime  @default(now()) @db.Timestamptz(3)
+  expiraEm             DateTime  @db.Timestamptz(3)
+  revogadaEm           DateTime? @db.Timestamptz(3)
+
+  vinculo VinculoEmpresa @relation(fields: [empresaId, vinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([empresaId, vinculoId])
+  @@index([expiraEm])
+}
+
+
+// BLOCO 2 - MODULOS E CONTROLE DE ACESSO
+
+enum StatusModuloEmpresa {
+  ATIVO
+  SUSPENSO
+  DESATIVADO
+}
+
+enum AlcancePermissao {
+  EMPRESA
+  PROPRIOS
+  PROJETOS_DESIGNADOS
+}
+
+// Catálogo global. Sua manutenção será restrita à administração da plataforma.
+model Modulo {
+  id           String   @id @default(uuid()) @db.Uuid
+  chave        String   @unique @db.VarChar(80)
+  nome         String   @db.VarChar(120)
+  descricao    String?  @db.VarChar(500)
+  obrigatorio  Boolean  @default(false)
+  disponivel   Boolean  @default(true)
+  criadoEm     DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @db.Timestamptz(3)
+
+  empresas     EmpresaModulo[]
+  permissoes   Permissao[]
+  dependencias DependenciaModulo[] @relation("ModuloPrincipal")
+  dependentes  DependenciaModulo[] @relation("ModuloRequerido")
+}
+
+// A aplicação deverá impedir dependências circulares e de um módulo consigo mesmo.
+model DependenciaModulo {
+  moduloId    String @db.Uuid
+  requeridoId String @db.Uuid
+
+  modulo    Modulo @relation("ModuloPrincipal", fields: [moduloId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  requerido Modulo @relation("ModuloRequerido", fields: [requeridoId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([moduloId, requeridoId])
+  @@index([requeridoId])
+}
+
+// Ativação/configuração independente para cada empresa.
+// Configuração não deve conter credenciais ou segredos.
+model EmpresaModulo {
+  empresaId    String              @db.Uuid
+  moduloId     String              @db.Uuid
+  status       StatusModuloEmpresa @default(DESATIVADO)
+  configuracao Json?
+  versao       Int                 @default(1)
+  criadoEm     DateTime            @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime            @updatedAt @db.Timestamptz(3)
+  ativadoEm    DateTime?           @db.Timestamptz(3)
+  desativadoEm DateTime?           @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  modulo  Modulo  @relation(fields: [moduloId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([empresaId, moduloId])
+  @@index([moduloId, status])
+}
+
+// Catálogo global de ações, por exemplo: projetos.visualizar.
+// Criar um perfil não permite inventar ações que o sistema não implementa.
+model Permissao {
+  id           String   @id @default(uuid()) @db.Uuid
+  moduloId     String   @db.Uuid
+  chave        String   @unique @db.VarChar(120)
+  nome         String   @db.VarChar(160)
+  descricao    String?  @db.VarChar(500)
+  criadoEm     DateTime @default(now()) @db.Timestamptz(3)
+
+  modulo Modulo @relation(fields: [moduloId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  perfis PerfilPermissao[]
+
+  @@index([moduloId])
+}
+
+// Cada empresa configura seus próprios perfis.
+model Perfil {
+  id           String   @id @default(uuid()) @db.Uuid
+  empresaId    String   @db.Uuid
+  nome         String   @db.VarChar(120)
+  descricao    String?  @db.VarChar(500)
+  ativo        Boolean  @default(true)
+  versao       Int      @default(1)
+  criadoEm     DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @db.Timestamptz(3)
+
+  empresa     Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  permissoes  PerfilPermissao[]
+  atribuicoes AtribuicaoPerfil[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, nome])
+  politicasComoAprovador PerfilAprovadorPolitica[]
+  pareceresAprovacao ParecerAprovacao[]
+}
+
+// Uma permissão pode ter mais de um alcance dentro do perfil.
+// Alçadas financeiras serão modeladas no bloco de aprovações.
+model PerfilPermissao {
+  empresaId    String           @db.Uuid
+  perfilId     String           @db.Uuid
+  permissaoId  String           @db.Uuid
+  alcance      AlcancePermissao
+  criadoEm     DateTime         @default(now()) @db.Timestamptz(3)
+
+  perfil    Perfil    @relation(fields: [empresaId, perfilId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  permissao Permissao @relation(fields: [permissaoId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([empresaId, perfilId, permissaoId, alcance])
+  @@index([permissaoId])
+}
+
+// As relações compostas impedem atribuir um perfil de outra empresa.
+// A revogação preserva o cadastro; alterações terão auditoria no próximo bloco.
+model AtribuicaoPerfil {
+  empresaId    String    @db.Uuid
+  vinculoId    String    @db.Uuid
+  perfilId     String    @db.Uuid
+  criadoEm     DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime  @updatedAt @db.Timestamptz(3)
+  revogadoEm   DateTime? @db.Timestamptz(3)
+
+  vinculo VinculoEmpresa @relation(fields: [empresaId, vinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  perfil  Perfil         @relation(fields: [empresaId, perfilId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([empresaId, vinculoId, perfilId])
+  @@index([empresaId, perfilId])
+}
+
+
+// BLOCO 3 - AUDITORIA POR EMPRESA
+
+enum TipoAutorAuditoria {
+  USUARIO
+  SISTEMA
+  INTEGRACAO
+  ANONIMO
+}
+
+enum ResultadoAuditoria {
+  SUCESSO
+  NEGADO
+  FALHA
+}
+
+// Histórico de eventos: somente inserção na aplicação.
+// Imutabilidade será reforçada nas permissões/migrações do banco.
+// Não registrar senhas, tokens, credenciais ou corpos de requisição indiscriminadamente.
+model EventoAuditoria {
+  id                 String              @id @default(uuid()) @db.Uuid
+  empresaId          String              @db.Uuid
+  autorVinculoId     String?             @db.Uuid
+  tipoAutor          TipoAutorAuditoria
+  autorIdentificacao String              @db.VarChar(200)
+  moduloChave        String              @db.VarChar(80)
+  acao               String              @db.VarChar(120)
+  entidadeTipo       String              @db.VarChar(100)
+  entidadeId         String?             @db.VarChar(200)
+  ocorridoEm         DateTime            @default(now()) @db.Timestamptz(3)
+  resultado          ResultadoAuditoria
+  requisicaoId       String              @db.VarChar(100)
+  justificativa      String?             @db.VarChar(2000)
+  codigoErro         String?             @db.VarChar(100)
+  valoresAnteriores  Json?
+  valoresPosteriores Json?
+  camposAlterados    String[]            @default([])
+  versaoAnterior     Int?
+  versaoPosterior    Int?
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  autorVinculo VinculoEmpresa? @relation(fields: [empresaId, autorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([empresaId, ocorridoEm])
+  @@index([empresaId, entidadeTipo, entidadeId, ocorridoEm])
+  @@index([empresaId, autorVinculoId, ocorridoEm])
+  @@index([empresaId, moduloChave, ocorridoEm])
+  @@index([empresaId, requisicaoId])
+}
+
+
+// BLOCO 4 - CLIENTES, CONTRATOS E PROJETOS
+
+enum TipoCliente {
+  PESSOA_FISICA
+  PESSOA_JURIDICA
+}
+
+enum StatusContrato {
+  RASCUNHO
+  VIGENTE
+  SUSPENSO
+  ENCERRADO
+  CANCELADO
+}
+
+enum ModalidadeCobranca {
+  PRECO_GLOBAL
+  POR_HORA
+  POR_ENTREGAVEL
+  MENSALIDADE
+  ALOCACAO
+  MISTA
+}
+
+enum StatusProjeto {
+  PLANEJADO
+  EM_ANDAMENTO
+  PAUSADO
+  CONCLUIDO
+  CANCELADO
+}
+
+enum PapelParticipacaoProjeto {
+  GESTOR
+  COLABORADOR
+  OBSERVADOR
+}
+
+model Cliente {
+  id                 String      @id @default(uuid()) @db.Uuid
+  empresaId          String      @db.Uuid
+  nome               String      @db.VarChar(200)
+  tipo               TipoCliente
+  documentoNormalizado String?   @db.VarChar(20)
+  email              String?     @db.VarChar(254)
+  telefone           String?     @db.VarChar(30)
+  versao             Int         @default(1)
+  criadoEm           DateTime    @default(now()) @db.Timestamptz(3)
+  atualizadoEm       DateTime    @updatedAt @db.Timestamptz(3)
+  arquivadoEm        DateTime?   @db.Timestamptz(3)
+
+  empresa  Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contratos Contrato[]
+  projetos  Projeto[] @relation("ClienteProjeto")
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, documentoNormalizado])
+  @@index([empresaId, nome])
+  titulosFinanceiros TituloFinanceiro[]
+}
+
+// Valores opcionais no rascunho; preenchimento exigido conforme modalidade.
+// Tarifas, itens e aditivos serão detalhados nos blocos seguintes.
+model Contrato {
+  id                    String             @id @default(uuid()) @db.Uuid
+  empresaId             String             @db.Uuid
+  clienteId             String             @db.Uuid
+  codigo                String             @db.VarChar(80)
+  titulo                String             @db.VarChar(200)
+  escopo                String             @db.Text
+  status                StatusContrato     @default(RASCUNHO)
+  modalidade            ModalidadeCobranca
+  moeda                 String             @default("BRL") @db.VarChar(3)
+  valorContratadoCentavos BigInt?
+  inicioVigencia        DateTime?          @db.Date
+  fimVigencia           DateTime?          @db.Date
+  assinadoEm            DateTime?          @db.Timestamptz(3)
+  versao                Int                @default(1)
+  criadoEm              DateTime           @default(now()) @db.Timestamptz(3)
+  atualizadoEm          DateTime           @updatedAt @db.Timestamptz(3)
+  arquivadoEm           DateTime?          @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  cliente Cliente @relation(fields: [empresaId, clienteId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  projetos Projeto[] @relation("ContratoProjeto")
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, codigo])
+  @@unique([empresaId, clienteId, id])
+  @@index([empresaId, clienteId, status])
+}
+
+// Cliente/contrato opcionais permitem projetos internos.
+// Regra pendente para a migração SQL:
+// contratoId preenchido exige clienteId preenchido.
+// Com ambos preenchidos, a relação composta garante o cliente do contrato.
+model Projeto {
+  id           String        @id @default(uuid()) @db.Uuid
+  empresaId    String        @db.Uuid
+  clienteId    String?       @db.Uuid
+  contratoId   String?       @db.Uuid
+  codigo       String        @db.VarChar(80)
+  nome         String        @db.VarChar(200)
+  descricao    String?       @db.Text
+  status       StatusProjeto @default(PLANEJADO)
+  inicioPrevisto DateTime?    @db.Date
+  fimPrevisto  DateTime?      @db.Date
+  iniciadoEm   DateTime?      @db.Timestamptz(3)
+  concluidoEm  DateTime?      @db.Timestamptz(3)
+  versao       Int           @default(1)
+  criadoEm     DateTime      @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime      @updatedAt @db.Timestamptz(3)
+  arquivadoEm  DateTime?     @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  cliente Cliente? @relation("ClienteProjeto", fields: [empresaId, clienteId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  contrato Contrato? @relation("ContratoProjeto", fields: [empresaId, clienteId, contratoId], references: [empresaId, clienteId, id], onDelete: Restrict, onUpdate: Restrict)
+  participantes ParticipacaoProjeto[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, codigo])
+  @@index([empresaId, status, fimPrevisto])
+  @@index([empresaId, clienteId])
+  @@index([empresaId, clienteId, contratoId])
+  fases Fase[]
+  entregaveis Entregavel[]
+  tarefas Tarefa[]
+  documentos Documento[]
+  reunioes Reuniao[]
+  alocacoesRecurso AlocacaoRecurso[]
+  apontamentosHoras ApontamentoHoras[]
+  orcamentos OrcamentoProjeto[]
+  titulosFinanceiros TituloFinanceiro[]
+  solicitacoesAprovacao SolicitacaoAprovacao[]
+}
+
+// Papel no projeto descreve a função, sem substituir as permissões do perfil.
+// Acesso exige vínculo ativo, participação vigente e permissão apropriada.
+model ParticipacaoProjeto {
+  empresaId    String                    @db.Uuid
+  projetoId    String                    @db.Uuid
+  vinculoId    String                    @db.Uuid
+  papel        PapelParticipacaoProjeto
+  criadoEm     DateTime                  @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime                  @updatedAt @db.Timestamptz(3)
+  encerradoEm  DateTime?                 @db.Timestamptz(3)
+
+  projeto Projeto @relation(fields: [empresaId, projetoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  vinculo VinculoEmpresa @relation(fields: [empresaId, vinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([empresaId, projetoId, vinculoId])
+  @@index([empresaId, vinculoId, encerradoEm])
+  tarefasResponsavel ResponsavelTarefa[]
+  encaminhamentosReuniao EncaminhamentoReuniao[]
+}
+
+
+// BLOCO 5 - FASES, ENTREGAVEIS E ACEITE
+
+enum StatusFase {
+  PLANEJADA
+  EM_ANDAMENTO
+  PAUSADA
+  CONCLUIDA
+  CANCELADA
+}
+
+enum StatusEntregavel {
+  PLANEJADO
+  EM_EXECUCAO
+  EM_REVISAO
+  AJUSTES_SOLICITADOS
+  APROVADO
+  CANCELADO
+}
+
+enum DecisaoAvaliacaoEntregavel {
+  APROVADO
+  AJUSTES_SOLICITADOS
+  REPROVADO
+}
+
+model Fase {
+  id             String     @id @default(uuid()) @db.Uuid
+  empresaId      String     @db.Uuid
+  projetoId      String     @db.Uuid
+  codigo         String     @db.VarChar(80)
+  nome           String     @db.VarChar(200)
+  descricao      String?    @db.Text
+  ordem          Int        @default(0)
+  status         StatusFase @default(PLANEJADA)
+  inicioPrevisto DateTime?  @db.Date
+  fimPrevisto    DateTime?  @db.Date
+  iniciadoEm     DateTime?  @db.Timestamptz(3)
+  concluidoEm    DateTime?  @db.Timestamptz(3)
+  versao         Int        @default(1)
+  criadoEm       DateTime   @default(now()) @db.Timestamptz(3)
+  atualizadoEm   DateTime   @updatedAt @db.Timestamptz(3)
+  arquivadoEm    DateTime?  @db.Timestamptz(3)
+
+  projeto Projeto @relation(fields: [empresaId, projetoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  entregaveis Entregavel[]
+
+  @@unique([empresaId, projetoId, id])
+  @@unique([empresaId, projetoId, codigo])
+  @@index([empresaId, projetoId, ordem])
+  tarefas Tarefa[]
+}
+
+// Resultado esperado, distinto das tarefas necessárias para produzi-lo.
+// A fase, quando informada, obrigatoriamente pertence ao mesmo projeto.
+model Entregavel {
+  id                   String           @id @default(uuid()) @db.Uuid
+  empresaId            String           @db.Uuid
+  projetoId            String           @db.Uuid
+  faseId               String?          @db.Uuid
+  responsavelVinculoId  String?          @db.Uuid
+  codigo               String           @db.VarChar(80)
+  nome                 String           @db.VarChar(200)
+  descricao            String           @db.Text
+  status               StatusEntregavel @default(PLANEJADO)
+  prazoPrevisto        DateTime?        @db.Date
+  versao               Int              @default(1)
+  criadoEm             DateTime         @default(now()) @db.Timestamptz(3)
+  atualizadoEm         DateTime         @updatedAt @db.Timestamptz(3)
+  arquivadoEm          DateTime?        @db.Timestamptz(3)
+
+  projeto Projeto @relation(fields: [empresaId, projetoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  fase Fase? @relation(fields: [empresaId, projetoId, faseId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  responsavel VinculoEmpresa? @relation("ResponsavelEntregavel", fields: [empresaId, responsavelVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  criterios CriterioAceite[]
+  submissoes SubmissaoEntregavel[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, projetoId, id])
+  @@unique([empresaId, projetoId, codigo])
+  @@index([empresaId, projetoId, status])
+  @@index([empresaId, projetoId, faseId])
+  @@index([empresaId, responsavelVinculoId])
+  tarefas Tarefa[]
+  decisoesReuniao DecisaoReuniao[]
+}
+
+model CriterioAceite {
+  id           String    @id @default(uuid()) @db.Uuid
+  empresaId    String    @db.Uuid
+  entregavelId String    @db.Uuid
+  descricao    String    @db.Text
+  obrigatorio  Boolean   @default(true)
+  ordem        Int       @default(0)
+  versao       Int       @default(1)
+  criadoEm     DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime  @updatedAt @db.Timestamptz(3)
+  arquivadoEm  DateTime? @db.Timestamptz(3)
+
+  entregavel Entregavel @relation(fields: [empresaId, entregavelId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, id])
+  @@index([empresaId, entregavelId, ordem])
+}
+
+// Registro definitivo de uma entrega submetida, sem edição pela aplicação.
+// Rascunhos e arquivos serão tratados no módulo de Documentos.
+// Snapshots são cópias estruturadas, geradas e validadas no servidor.
+model SubmissaoEntregavel {
+  projetoId String @db.Uuid
+  id                     String   @id @default(uuid()) @db.Uuid
+  empresaId              String   @db.Uuid
+  entregavelId           String   @db.Uuid
+  autorVinculoId         String   @db.Uuid
+  numero                 Int
+  resumo                 String   @db.Text
+  versaoEntregavel        Int
+  descricaoEntregavelSnapshot String @db.Text
+  criteriosSnapshot      Json
+  submetidoEm            DateTime @default(now()) @db.Timestamptz(3)
+
+  entregavel Entregavel @relation(fields: [empresaId, projetoId, entregavelId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  autor VinculoEmpresa @relation("AutorSubmissaoEntregavel", fields: [empresaId, autorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  avaliacoes AvaliacaoEntregavel[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, entregavelId, numero])
+  @@index([empresaId, autorVinculoId])
+  anexos AnexoSubmissaoEntregavel[]
+  @@unique([empresaId, projetoId, id])
+}
+
+// Parecer de um avaliador autenticado sobre uma submissão específica.
+// Um parecer não implica automaticamente o aceite final do entregável.
+// Política de aprovação e quantidade de aprovadores serão verificadas no servidor.
+model AvaliacaoEntregavel {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  empresaId           String                     @db.Uuid
+  submissaoId         String                     @db.Uuid
+  avaliadorVinculoId   String                     @db.Uuid
+  decisao             DecisaoAvaliacaoEntregavel
+  observacoes         String                     @db.Text
+  resultadosCriterios Json
+  avaliadoEm          DateTime                   @default(now()) @db.Timestamptz(3)
+
+  submissao SubmissaoEntregavel @relation(fields: [empresaId, submissaoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  avaliador VinculoEmpresa @relation("AvaliadorEntregavel", fields: [empresaId, avaliadorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, id])
+  @@index([empresaId, submissaoId, avaliadoEm])
+  @@index([empresaId, avaliadorVinculoId])
+  // Parecer central e avaliação específica serão gravados juntos.
+  // O serviço verificará tipo, objeto, versão, avaliador e decisão.
+  // Somente o parecer central será contado no quórum de aprovação.
+  parecerId String @db.Uuid
+  parecer ParecerAprovacao @relation(fields: [empresaId, parecerId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, parecerId])
+}
+
+
+// BLOCO 6 - TAREFAS E DEPENDENCIAS DO CRONOGRAMA
+
+enum StatusTarefa {
+  PLANEJADA
+  EM_ANDAMENTO
+  BLOQUEADA
+  EM_REVISAO
+  CONCLUIDA
+  CANCELADA
+}
+
+enum PrioridadeTarefa {
+  BAIXA
+  NORMAL
+  ALTA
+  URGENTE
+}
+
+enum TipoDependenciaTarefa {
+  TERMINO_INICIO
+  INICIO_INICIO
+  TERMINO_TERMINO
+  INICIO_TERMINO
+}
+
+// Datas de planejamento com horário são instantes.
+// A interface deve convertê-los usando o fuso horário da empresa.
+// Esforço estimado não é a duração do calendário.
+model Tarefa {
+  id                    String          @id @default(uuid()) @db.Uuid
+  empresaId             String          @db.Uuid
+  projetoId             String          @db.Uuid
+  faseId                String?         @db.Uuid
+  entregavelId          String?         @db.Uuid
+  codigo                String          @db.VarChar(80)
+  titulo                String          @db.VarChar(200)
+  descricao             String?         @db.Text
+  status                StatusTarefa    @default(PLANEJADA)
+  prioridade            PrioridadeTarefa @default(NORMAL)
+  ordem                 Int             @default(0)
+  inicioPrevisto        DateTime?       @db.Timestamptz(3)
+  fimPrevisto           DateTime?       @db.Timestamptz(3)
+  iniciadoEm            DateTime?       @db.Timestamptz(3)
+  concluidoEm           DateTime?       @db.Timestamptz(3)
+  esforcoEstimadoMinutos Int?
+  progressoPercentual   Int             @default(0)
+  versao                Int             @default(1)
+  criadoEm              DateTime        @default(now()) @db.Timestamptz(3)
+  atualizadoEm          DateTime        @updatedAt @db.Timestamptz(3)
+  arquivadoEm           DateTime?       @db.Timestamptz(3)
+
+  projeto Projeto @relation(fields: [empresaId, projetoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  fase Fase? @relation(fields: [empresaId, projetoId, faseId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  entregavel Entregavel? @relation(fields: [empresaId, projetoId, entregavelId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  responsaveis ResponsavelTarefa[]
+  dependenciasEntrada DependenciaTarefa[] @relation("TarefaSucessora")
+  dependenciasSaida DependenciaTarefa[] @relation("TarefaPredecessora")
+
+  @@unique([empresaId, projetoId, id])
+  @@unique([empresaId, projetoId, codigo])
+  @@index([empresaId, projetoId, status, fimPrevisto])
+  @@index([empresaId, projetoId, faseId])
+  @@index([empresaId, projetoId, entregavelId])
+  origensReuniao TarefaEncaminhamento[]
+  alocacoesRecurso AlocacaoRecurso[]
+  apontamentosHoras ApontamentoHoras[]
+}
+
+// Responsável deve possuir uma participação no mesmo projeto.
+// A aplicação também verificará se essa participação está vigente.
+model ResponsavelTarefa {
+  empresaId    String    @db.Uuid
+  projetoId    String    @db.Uuid
+  tarefaId     String    @db.Uuid
+  vinculoId    String    @db.Uuid
+  criadoEm     DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime  @updatedAt @db.Timestamptz(3)
+  encerradoEm  DateTime? @db.Timestamptz(3)
+
+  tarefa Tarefa @relation(fields: [empresaId, projetoId, tarefaId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  participacao ParticipacaoProjeto @relation(fields: [empresaId, projetoId, vinculoId], references: [empresaId, projetoId, vinculoId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([empresaId, projetoId, tarefaId, vinculoId])
+  @@index([empresaId, projetoId, vinculoId, encerradoEm])
+}
+
+// Uma dependência liga tarefas da mesma empresa e projeto.
+// Intervalo positivo = espera; negativo = antecipação.
+// Autodependência será proibida por CHECK na migração.
+// Ciclos entre várias tarefas serão impedidos pelo serviço.
+model DependenciaTarefa {
+  empresaId      String                @db.Uuid
+  projetoId      String                @db.Uuid
+  predecessoraId String                @db.Uuid
+  sucessoraId    String                @db.Uuid
+  tipo           TipoDependenciaTarefa @default(TERMINO_INICIO)
+  intervaloMinutos Int                @default(0)
+  criadoEm       DateTime              @default(now()) @db.Timestamptz(3)
+  atualizadoEm   DateTime              @updatedAt @db.Timestamptz(3)
+
+  predecessora Tarefa @relation("TarefaPredecessora", fields: [empresaId, projetoId, predecessoraId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  sucessora Tarefa @relation("TarefaSucessora", fields: [empresaId, projetoId, sucessoraId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([empresaId, projetoId, predecessoraId, sucessoraId])
+  @@index([empresaId, projetoId, sucessoraId])
+}
+
+
+// BLOCO 7 - DOCUMENTOS E VERSOES
+
+enum VisibilidadeDocumento {
+  INTERNO
+  CLIENTE
+}
+
+enum StatusArquivoDocumento {
+  PENDENTE
+  DISPONIVEL
+  REJEITADO
+  FALHA
+}
+
+// Cadastro lógico do documento. O arquivo fica no armazenamento privado.
+// CLIENTE permite publicação no portal, mas não concede acesso por si só.
+model Documento {
+  id           String                @id @default(uuid()) @db.Uuid
+  empresaId    String                @db.Uuid
+  projetoId    String                @db.Uuid
+  codigo       String                @db.VarChar(80)
+  titulo       String                @db.VarChar(200)
+  descricao    String?               @db.Text
+  visibilidade VisibilidadeDocumento @default(INTERNO)
+  versao       Int                   @default(1)
+  criadoEm     DateTime              @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime              @updatedAt @db.Timestamptz(3)
+  arquivadoEm  DateTime?             @db.Timestamptz(3)
+
+  projeto Projeto @relation(fields: [empresaId, projetoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  versoes VersaoDocumento[]
+
+  @@unique([empresaId, projetoId, id])
+  @@unique([empresaId, projetoId, codigo])
+  @@index([empresaId, projetoId, arquivadoEm])
+}
+
+// Número editorial é diferente do campo de controle de concorrência.
+// Após disponibilização, conteúdo e metadados do arquivo serão imutáveis.
+// Correção do conteúdo gera outra versão, sem sobrescrever o objeto anterior.
+model VersaoDocumento {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  empresaId             String                 @db.Uuid
+  projetoId             String                 @db.Uuid
+  documentoId           String                 @db.Uuid
+  autorVinculoId        String                 @db.Uuid
+  numero                Int
+  notaVersao            String?                @db.Text
+  nomeArquivoOriginal   String                 @db.VarChar(255)
+  tipoMime              String?                @db.VarChar(150)
+  tamanhoBytes          BigInt?
+  sha256                String?                @db.VarChar(64)
+  armazenamento         String                 @db.VarChar(80)
+  container             String                 @db.VarChar(200)
+  chaveObjeto           String                 @db.VarChar(500)
+  statusArquivo         StatusArquivoDocumento @default(PENDENTE)
+  codigoFalha           String?                @db.VarChar(100)
+  versao                Int                    @default(1)
+  criadoEm              DateTime               @default(now()) @db.Timestamptz(3)
+  atualizadoEm          DateTime               @updatedAt @db.Timestamptz(3)
+  disponibilizadoEm     DateTime?              @db.Timestamptz(3)
+
+  documento Documento @relation(fields: [empresaId, projetoId, documentoId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  autor VinculoEmpresa @relation("AutorVersaoDocumento", fields: [empresaId, autorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, projetoId, id])
+  @@unique([empresaId, projetoId, documentoId, numero])
+  @@unique([armazenamento, container, chaveObjeto])
+  @@index([empresaId, projetoId, statusArquivo])
+  @@index([empresaId, autorVinculoId])
+  anexosAta AnexoAta[]
+  anexosSubmissao AnexoSubmissaoEntregavel[]
+}
+
+
+// BLOCO 8A - MEMORIA DOCUMENTAL DAS REUNIOES
+
+enum StatusReuniao {
+  PLANEJADA
+  REALIZADA
+  CANCELADA
+}
+
+enum StatusVersaoAta {
+  RASCUNHO
+  EM_REVISAO
+  AJUSTES_SOLICITADOS
+  APROVADA
+}
+
+enum DecisaoAvaliacaoAta {
+  APROVADA
+  AJUSTES_SOLICITADOS
+  REPROVADA
+}
+
+// Registro documental de reunião realizada fora da plataforma.
+model Reuniao {
+  id                   String        @id @default(uuid()) @db.Uuid
+  empresaId            String        @db.Uuid
+  projetoId            String        @db.Uuid
+  registradorVinculoId  String        @db.Uuid
+  titulo               String        @db.VarChar(200)
+  pauta                String?       @db.Text
+  localOuReferencia    String?       @db.VarChar(500)
+  status               StatusReuniao @default(PLANEJADA)
+  inicioPrevisto       DateTime?     @db.Timestamptz(3)
+  fimPrevisto          DateTime?     @db.Timestamptz(3)
+  inicioReal           DateTime?     @db.Timestamptz(3)
+  fimReal              DateTime?     @db.Timestamptz(3)
+  versao               Int           @default(1)
+  criadoEm             DateTime      @default(now()) @db.Timestamptz(3)
+  atualizadoEm         DateTime      @updatedAt @db.Timestamptz(3)
+  arquivadoEm          DateTime?     @db.Timestamptz(3)
+
+  projeto Projeto @relation(fields: [empresaId, projetoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  registrador VinculoEmpresa @relation("RegistradorReuniao", fields: [empresaId, registradorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  participantes ParticipanteReuniao[]
+  atas VersaoAta[]
+
+  @@unique([empresaId, projetoId, id])
+  @@index([empresaId, projetoId, inicioReal])
+  @@index([empresaId, projetoId, inicioPrevisto])
+  @@index([empresaId, registradorVinculoId])
+}
+
+// Participantes externos podem ser registrados sem possuir login.
+// Nome e organização registram a identificação usada nessa reunião.
+model ParticipanteReuniao {
+  id             String    @id @default(uuid()) @db.Uuid
+  empresaId      String    @db.Uuid
+  projetoId      String    @db.Uuid
+  reuniaoId      String    @db.Uuid
+  vinculoId      String?   @db.Uuid
+  nome           String    @db.VarChar(200)
+  organizacao    String?   @db.VarChar(200)
+  funcaoNaReuniao String?  @db.VarChar(120)
+  presente       Boolean   @default(false)
+  versao         Int       @default(1)
+  criadoEm       DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm   DateTime  @updatedAt @db.Timestamptz(3)
+
+  reuniao Reuniao @relation(fields: [empresaId, projetoId, reuniaoId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  vinculo VinculoEmpresa? @relation("ParticipanteInternoReuniao", fields: [empresaId, vinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, projetoId, reuniaoId, vinculoId])
+  @@index([empresaId, projetoId, reuniaoId])
+  @@index([empresaId, vinculoId])
+}
+
+// Conteúdo aprovado será imutável; correção exige nova versão.
+// Snapshot preserva título, pauta, datas e participantes da reunião.
+// Seu formato e preenchimento na submissão serão validados pelo servidor.
+model VersaoAta {
+  id              String          @id @default(uuid()) @db.Uuid
+  empresaId       String          @db.Uuid
+  projetoId       String          @db.Uuid
+  reuniaoId       String          @db.Uuid
+  autorVinculoId  String          @db.Uuid
+  numero          Int
+  conteudo        String          @db.Text
+  reuniaoSnapshot Json?
+  status          StatusVersaoAta @default(RASCUNHO)
+  notaRevisao     String?         @db.Text
+  versao          Int             @default(1)
+  criadoEm        DateTime        @default(now()) @db.Timestamptz(3)
+  atualizadoEm    DateTime        @updatedAt @db.Timestamptz(3)
+  submetidaEm     DateTime?       @db.Timestamptz(3)
+  aprovadaEm      DateTime?       @db.Timestamptz(3)
+
+  reuniao Reuniao @relation(fields: [empresaId, projetoId, reuniaoId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  autor VinculoEmpresa @relation("AutorAta", fields: [empresaId, autorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  avaliacoes AvaliacaoAta[]
+  anexos AnexoAta[]
+
+  @@unique([empresaId, projetoId, id])
+  @@unique([empresaId, projetoId, reuniaoId, numero])
+  @@index([empresaId, projetoId, status])
+  @@index([empresaId, autorVinculoId])
+  decisoes DecisaoReuniao[]
+  encaminhamentos EncaminhamentoReuniao[]
+}
+
+// Parecer autenticado e preservado.
+// O serviço aplicará a política de aprovação antes de aprovar a ata.
+// Participante externo sem login não gera aprovação autenticada.
+model AvaliacaoAta {
+  id                    String              @id @default(uuid()) @db.Uuid
+  empresaId             String              @db.Uuid
+  projetoId             String              @db.Uuid
+  versaoAtaId           String              @db.Uuid
+  avaliadorVinculoId    String              @db.Uuid
+  versaoConteudoAvaliada Int
+  decisao               DecisaoAvaliacaoAta
+  observacoes           String              @db.Text
+  dadosAtaSnapshot      Json
+  avaliadoEm            DateTime            @default(now()) @db.Timestamptz(3)
+
+  ata VersaoAta @relation(fields: [empresaId, projetoId, versaoAtaId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  avaliador VinculoEmpresa @relation("AvaliadorAta", fields: [empresaId, avaliadorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  // Identifica o campo versao de VersaoAta no momento do parecer.
+  // Snapshot inclui conteúdo, participantes, decisões, encaminhamentos
+  // e referências às versões dos documentos efetivamente avaliados.
+  // Gerado no servidor, na mesma transação do parecer.
+  // Parecer anterior não aprova conteúdo alterado posteriormente.
+  @@unique([empresaId, projetoId, versaoAtaId, versaoConteudoAvaliada, avaliadorVinculoId], map: "AvaliacaoAta_revisao_avaliador_key")
+  @@index([empresaId, projetoId, versaoAtaId, avaliadoEm])
+  @@index([empresaId, avaliadorVinculoId])
+  // Parecer central e avaliação específica serão gravados juntos.
+  // O serviço verificará tipo, objeto, versão, avaliador e decisão.
+  // Somente o parecer central será contado no quórum de aprovação.
+  parecerId String @db.Uuid
+  parecer ParecerAprovacao @relation(fields: [empresaId, parecerId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, parecerId])
+}
+
+// Ata e documento necessariamente pertencem ao mesmo projeto.
+// Somente versões de arquivo DISPONIVEL poderão ser anexadas pelo serviço.
+// Anexos de uma ata aprovada serão preservados.
+model AnexoAta {
+  empresaId        String   @db.Uuid
+  projetoId        String   @db.Uuid
+  versaoAtaId      String   @db.Uuid
+  versaoDocumentoId String  @db.Uuid
+  criadoEm         DateTime @default(now()) @db.Timestamptz(3)
+
+  ata VersaoAta @relation(fields: [empresaId, projetoId, versaoAtaId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  documento VersaoDocumento @relation(fields: [empresaId, projetoId, versaoDocumentoId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([empresaId, projetoId, versaoAtaId, versaoDocumentoId])
+  @@index([empresaId, projetoId, versaoDocumentoId])
+}
+
+
+// BLOCO 8B - DECISOES E ENCAMINHAMENTOS DAS REUNIOES
+
+// Registro do que foi decidido, pertencente à versão exata da ata.
+// Após submissão, alterações seguirão o fluxo de revisão da ata.
+model DecisaoReuniao {
+  id            String   @id @default(uuid()) @db.Uuid
+  empresaId     String   @db.Uuid
+  projetoId     String   @db.Uuid
+  versaoAtaId   String   @db.Uuid
+  entregavelId  String?  @db.Uuid
+  ordem         Int      @default(0)
+  descricao     String   @db.Text
+  justificativa String?  @db.Text
+  decisoresSnapshot String? @db.Text
+  versao        Int      @default(1)
+  criadoEm      DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm  DateTime @updatedAt @db.Timestamptz(3)
+
+  ata VersaoAta @relation(fields: [empresaId, projetoId, versaoAtaId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  entregavel Entregavel? @relation(fields: [empresaId, projetoId, entregavelId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  encaminhamentos EncaminhamentoReuniao[]
+
+  @@unique([empresaId, projetoId, versaoAtaId, id])
+  @@index([empresaId, projetoId, versaoAtaId, ordem])
+  @@index([empresaId, projetoId, entregavelId])
+}
+
+// Compromisso registrado na ata: ação, responsável e prazo.
+// Pode existir sem decisão vinculada ou sem usuário interno responsável.
+// Nome preserva quem foi designado naquele momento, inclusive externos.
+model EncaminhamentoReuniao {
+  id                    String    @id @default(uuid()) @db.Uuid
+  empresaId             String    @db.Uuid
+  projetoId             String    @db.Uuid
+  versaoAtaId           String    @db.Uuid
+  decisaoId             String?   @db.Uuid
+  responsavelVinculoId   String?   @db.Uuid
+  responsavelNomeSnapshot String?  @db.VarChar(200)
+  descricao             String    @db.Text
+  prazoCombinado        DateTime? @db.Date
+  ordem                 Int       @default(0)
+  versao                Int       @default(1)
+  criadoEm              DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm          DateTime  @updatedAt @db.Timestamptz(3)
+
+  ata VersaoAta @relation(fields: [empresaId, projetoId, versaoAtaId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  decisao DecisaoReuniao? @relation(fields: [empresaId, projetoId, versaoAtaId, decisaoId], references: [empresaId, projetoId, versaoAtaId, id], onDelete: Restrict, onUpdate: Restrict)
+  responsavel ParticipacaoProjeto? @relation(fields: [empresaId, projetoId, responsavelVinculoId], references: [empresaId, projetoId, vinculoId], onDelete: Restrict, onUpdate: Restrict)
+  tarefas TarefaEncaminhamento[]
+
+  @@unique([empresaId, projetoId, id])
+  @@index([empresaId, projetoId, versaoAtaId, ordem])
+  @@index([empresaId, projetoId, versaoAtaId, decisaoId])
+  @@index([empresaId, projetoId, responsavelVinculoId])
+}
+
+// Liga execução à sua origem documental, sem alterar o conteúdo da ata.
+// Um encaminhamento pode gerar várias tarefas.
+// Criação/encerramento do vínculo terá auditoria no serviço.
+model TarefaEncaminhamento {
+  empresaId        String    @db.Uuid
+  projetoId        String    @db.Uuid
+  encaminhamentoId String    @db.Uuid
+  tarefaId         String    @db.Uuid
+  criadoEm         DateTime  @default(now()) @db.Timestamptz(3)
+  encerradoEm      DateTime? @db.Timestamptz(3)
+
+  encaminhamento EncaminhamentoReuniao @relation(fields: [empresaId, projetoId, encaminhamentoId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  tarefa Tarefa @relation(fields: [empresaId, projetoId, tarefaId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([empresaId, projetoId, encaminhamentoId, tarefaId])
+  @@index([empresaId, projetoId, tarefaId])
+}
+
+
+// BLOCO 9 - RECURSOS E ALOCACOES
+
+enum TipoRecurso {
+  PESSOA
+  EQUIPAMENTO
+  VEICULO
+  INSTALACAO
+  LICENCA_SOFTWARE
+  MATERIAL
+  SUBCONTRATADO
+}
+
+enum UnidadeCustoRecurso {
+  HORA
+  DIA
+  MES
+  USO
+  UNIDADE
+}
+
+enum StatusAlocacaoRecurso {
+  PREVISTA
+  CONFIRMADA
+  ENCERRADA
+  CANCELADA
+}
+
+// Vínculo de login opcional e exclusivo de recurso do tipo PESSOA.
+// Capacidade simultânea representa disponibilidade concorrente,
+// não estoque de materiais nem horas produtivas semanais.
+model Recurso {
+  id                    String      @id @default(uuid()) @db.Uuid
+  empresaId             String      @db.Uuid
+  vinculoPessoaId       String?     @db.Uuid
+  codigo                String      @db.VarChar(80)
+  nome                  String      @db.VarChar(200)
+  tipo                  TipoRecurso
+  descricao             String?     @db.Text
+  capacidadeSimultanea  Decimal?    @db.Decimal(18, 4)
+  unidadeCapacidade     String?     @db.VarChar(80)
+  versao                Int         @default(1)
+  criadoEm              DateTime    @default(now()) @db.Timestamptz(3)
+  atualizadoEm          DateTime    @updatedAt @db.Timestamptz(3)
+  arquivadoEm           DateTime?   @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  vinculoPessoa VinculoEmpresa? @relation(fields: [empresaId, vinculoPessoaId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  custos CustoRecurso[]
+  indisponibilidades IndisponibilidadeRecurso[]
+  alocacoes AlocacaoRecurso[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, codigo])
+  @@unique([empresaId, vinculoPessoaId])
+  @@index([empresaId, tipo, arquivadoEm])
+  apontamentosHoras ApontamentoHoras[]
+  itensOrcamento ItemOrcamentoProjeto[]
+}
+
+// Alteração de tarifa exige novo período de vigência.
+// Vigência usa intervalo [inicio, fim); fim nulo significa aberto.
+// A aplicação impedirá sobreposição para a mesma unidade/moeda.
+model CustoRecurso {
+  id                    String               @id @default(uuid()) @db.Uuid
+  empresaId             String               @db.Uuid
+  recursoId             String               @db.Uuid
+  unidade               UnidadeCustoRecurso
+  moeda                 String               @default("BRL") @db.VarChar(3)
+  custoUnitarioCentavos  BigInt
+  inicioVigencia        DateTime             @db.Timestamptz(3)
+  fimVigencia           DateTime?            @db.Timestamptz(3)
+  criadoEm              DateTime             @default(now()) @db.Timestamptz(3)
+
+  recurso Recurso @relation(fields: [empresaId, recursoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  alocacoes AlocacaoRecurso[]
+
+  @@unique([empresaId, recursoId, id])
+  @@index([empresaId, recursoId, unidade, moeda, inicioVigencia])
+  apontamentosHoras ApontamentoHoras[]
+}
+
+// Bloqueios por férias, manutenção, interdição ou outros motivos.
+// Descrição não deve conter informações médicas ou pessoais desnecessárias.
+model IndisponibilidadeRecurso {
+  id           String    @id @default(uuid()) @db.Uuid
+  empresaId    String    @db.Uuid
+  recursoId    String    @db.Uuid
+  inicio       DateTime  @db.Timestamptz(3)
+  fim          DateTime  @db.Timestamptz(3)
+  motivo       String    @db.VarChar(300)
+  versao       Int       @default(1)
+  criadoEm     DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime  @updatedAt @db.Timestamptz(3)
+  canceladoEm  DateTime? @db.Timestamptz(3)
+
+  recurso Recurso @relation(fields: [empresaId, recursoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([empresaId, recursoId, inicio, fim])
+}
+
+// Reserva planejada de recurso, distinta do consumo/custo realizado.
+// Quantidade reservada usa a unidade de capacidade do recurso.
+// Quantidade de custo usa a unidade da tarifa; não confundir as duas.
+model AlocacaoRecurso {
+  id                       String                @id @default(uuid()) @db.Uuid
+  empresaId                String                @db.Uuid
+  projetoId                String                @db.Uuid
+  tarefaId                 String?               @db.Uuid
+  recursoId                String                @db.Uuid
+  custoRecursoId           String?               @db.Uuid
+  status                   StatusAlocacaoRecurso @default(PREVISTA)
+  inicio                   DateTime              @db.Timestamptz(3)
+  fim                      DateTime              @db.Timestamptz(3)
+  quantidadeReservada      Decimal               @db.Decimal(18, 4)
+  unidadeCapacidadeSnapshot String               @db.VarChar(80)
+  quantidadeCustoPrevista  Decimal?              @db.Decimal(18, 4)
+  unidadeCustoSnapshot     UnidadeCustoRecurso?
+  moedaSnapshot            String?               @db.VarChar(3)
+  custoUnitarioCentavosSnapshot BigInt?
+  observacoes              String?               @db.Text
+  versao                   Int                   @default(1)
+  criadoEm                 DateTime              @default(now()) @db.Timestamptz(3)
+  atualizadoEm             DateTime              @updatedAt @db.Timestamptz(3)
+  confirmadoEm             DateTime?             @db.Timestamptz(3)
+  encerradoEm              DateTime?             @db.Timestamptz(3)
+  canceladoEm              DateTime?             @db.Timestamptz(3)
+
+  projeto Projeto @relation(fields: [empresaId, projetoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  tarefa Tarefa? @relation(fields: [empresaId, projetoId, tarefaId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  recurso Recurso @relation(fields: [empresaId, recursoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  custo CustoRecurso? @relation(fields: [empresaId, recursoId, custoRecursoId], references: [empresaId, recursoId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, id])
+  @@index([empresaId, projetoId, status])
+  @@index([empresaId, projetoId, tarefaId])
+  @@index([empresaId, recursoId, inicio, fim])
+  @@index([empresaId, recursoId, custoRecursoId])
+}
+
+
+// BLOCO 10A - HORAS, AVALIACOES E PERIODOS
+
+enum StatusPeriodoHoras {
+  ABERTO
+  EM_FECHAMENTO
+  FECHADO
+}
+
+enum StatusApontamentoHoras {
+  RASCUNHO
+  EM_APROVACAO
+  AJUSTES_SOLICITADOS
+  APROVADO
+  REJEITADO
+  CANCELADO
+}
+
+enum OrigemApontamentoHoras {
+  MANUAL
+  CRONOMETRO
+}
+
+enum DecisaoAvaliacaoHoras {
+  APROVADO
+  AJUSTES_SOLICITADOS
+  REJEITADO
+}
+
+// Período de competência da empresa, incluindo início e fim.
+// Períodos não poderão se sobrepor.
+// Fechado: registros preservados; correções por ajuste separado.
+model PeriodoHoras {
+  id                  String             @id @default(uuid()) @db.Uuid
+  empresaId           String             @db.Uuid
+  codigo              String             @db.VarChar(80)
+  inicio              DateTime           @db.Date
+  fim                 DateTime           @db.Date
+  status              StatusPeriodoHoras @default(ABERTO)
+  fechadoPorVinculoId String?            @db.Uuid
+  fechadoEm           DateTime?         @db.Timestamptz(3)
+  versao              Int                @default(1)
+  criadoEm            DateTime           @default(now()) @db.Timestamptz(3)
+  atualizadoEm        DateTime           @updatedAt @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  fechadoPor VinculoEmpresa? @relation("ResponsavelFechamentoHoras", fields: [empresaId, fechadoPorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  apontamentos ApontamentoHoras[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, codigo])
+  @@index([empresaId, inicio, fim])
+  ajustesAplicados AjusteHoras[]
+}
+
+// Recurso deve ser do tipo PESSOA; tarifa, quando usada, deve ser HORA.
+// Data de competência calculada no fuso da empresa.
+// Somente rascunhos/ajustes autorizados poderão ser editados.
+// Data deve pertencer ao período e tarefa deve pertencer ao projeto.
+model ApontamentoHoras {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  empresaId            String                  @db.Uuid
+  projetoId            String                  @db.Uuid
+  tarefaId             String?                 @db.Uuid
+  recursoId            String                  @db.Uuid
+  periodoId            String                  @db.Uuid
+  autorVinculoId       String                  @db.Uuid
+  custoRecursoId       String?                 @db.Uuid
+  dataCompetencia      DateTime                @db.Date
+  minutos              Int
+  descricao            String                  @db.Text
+  origem               OrigemApontamentoHoras  @default(MANUAL)
+  inicioTrabalho       DateTime?               @db.Timestamptz(3)
+  fimTrabalho          DateTime?               @db.Timestamptz(3)
+  faturavel            Boolean                 @default(false)
+  status               StatusApontamentoHoras  @default(RASCUNHO)
+  moedaCustoSnapshot   String?                 @db.VarChar(3)
+  custoHoraCentavosSnapshot BigInt?
+  versao               Int                     @default(1)
+  criadoEm             DateTime                @default(now()) @db.Timestamptz(3)
+  atualizadoEm         DateTime                @updatedAt @db.Timestamptz(3)
+  submetidoEm          DateTime?               @db.Timestamptz(3)
+  aprovadoEm           DateTime?               @db.Timestamptz(3)
+  canceladoEm          DateTime?               @db.Timestamptz(3)
+
+  projeto Projeto @relation(fields: [empresaId, projetoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  tarefa Tarefa? @relation(fields: [empresaId, projetoId, tarefaId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  recurso Recurso @relation(fields: [empresaId, recursoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  periodo PeriodoHoras @relation(fields: [empresaId, periodoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  autor VinculoEmpresa @relation("AutorApontamentoHoras", fields: [empresaId, autorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  custo CustoRecurso? @relation(fields: [empresaId, recursoId, custoRecursoId], references: [empresaId, recursoId, id], onDelete: Restrict, onUpdate: Restrict)
+  avaliacoes AvaliacaoHoras[]
+
+  @@unique([empresaId, id])
+  @@index([empresaId, projetoId, dataCompetencia])
+  @@index([empresaId, projetoId, tarefaId])
+  @@index([empresaId, recursoId, dataCompetencia])
+  @@index([empresaId, periodoId, status])
+  @@index([empresaId, autorVinculoId])
+  @@index([empresaId, recursoId, custoRecursoId])
+  ajustes AjusteHoras[]
+}
+
+// Parecer preserva a versão e os dados efetivamente avaliados.
+// A aprovação não pode valer para uma edição posterior do apontamento.
+// Quantidade de aprovadores e impedimento de autoaprovação serão configurados.
+model AvaliacaoHoras {
+  id                       String                @id @default(uuid()) @db.Uuid
+  empresaId                String                @db.Uuid
+  apontamentoId            String                @db.Uuid
+  avaliadorVinculoId       String                @db.Uuid
+  versaoApontamento        Int
+  decisao                  DecisaoAvaliacaoHoras
+  observacoes              String                @db.Text
+  dadosApontamentoSnapshot Json
+  avaliadoEm               DateTime              @default(now()) @db.Timestamptz(3)
+
+  apontamento ApontamentoHoras @relation(fields: [empresaId, apontamentoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  avaliador VinculoEmpresa @relation("AvaliadorHoras", fields: [empresaId, avaliadorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, apontamentoId, versaoApontamento, avaliadorVinculoId])
+  @@index([empresaId, avaliadorVinculoId])
+  // Parecer central e avaliação específica serão gravados juntos.
+  // O serviço verificará tipo, objeto, versão, avaliador e decisão.
+  // Somente o parecer central será contado no quórum de aprovação.
+  parecerId String @db.Uuid
+  parecer ParecerAprovacao @relation(fields: [empresaId, parecerId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, parecerId])
+}
+
+
+// BLOCO 10B - AJUSTES SEM ALTERAR O FECHAMENTO ORIGINAL
+
+enum StatusAjusteHoras {
+  RASCUNHO
+  EM_APROVACAO
+  AJUSTES_SOLICITADOS
+  APROVADO
+  REJEITADO
+  CANCELADO
+}
+
+// Delta positivo acrescenta; negativo reduz.
+// Custo delta nulo significa não determinado, nunca custo zero.
+// Ajuste aplicado será imutável; sua compensação exige outro ajuste.
+// Projeto, tarefa e pessoa são derivados do apontamento original.
+// Troca de projeto/pessoa exige redução na origem e novo lançamento no destino.
+model AjusteHoras {
+  id                       String           @id @default(uuid()) @db.Uuid
+  empresaId                String           @db.Uuid
+  apontamentoId            String           @db.Uuid
+  periodoAplicacaoId       String           @db.Uuid
+  solicitanteVinculoId     String           @db.Uuid
+  ajusteAnteriorId         String?          @db.Uuid
+  justificativa            String           @db.Text
+  minutosDelta             Int
+  custoDeltaCentavos       BigInt?
+  moedaCusto               String?          @db.VarChar(3)
+  dataAplicacao            DateTime         @db.Date
+  baseCalculoSnapshot      Json?
+  status                   StatusAjusteHoras @default(RASCUNHO)
+  versao                   Int              @default(1)
+  criadoEm                 DateTime         @default(now()) @db.Timestamptz(3)
+  atualizadoEm             DateTime         @updatedAt @db.Timestamptz(3)
+  submetidoEm              DateTime?        @db.Timestamptz(3)
+  aprovadoEm               DateTime?        @db.Timestamptz(3)
+  aplicadoEm               DateTime?        @db.Timestamptz(3)
+  canceladoEm              DateTime?        @db.Timestamptz(3)
+
+  apontamento ApontamentoHoras @relation(fields: [empresaId, apontamentoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  periodoAplicacao PeriodoHoras @relation(fields: [empresaId, periodoAplicacaoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  solicitante VinculoEmpresa @relation("SolicitanteAjusteHoras", fields: [empresaId, solicitanteVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  ajusteAnterior AjusteHoras? @relation("CompensacaoAjusteHoras", fields: [empresaId, ajusteAnteriorId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  compensacoes AjusteHoras[] @relation("CompensacaoAjusteHoras")
+  avaliacoes AvaliacaoAjusteHoras[]
+
+  @@unique([empresaId, id])
+  @@index([empresaId, apontamentoId, aplicadoEm])
+  @@index([empresaId, periodoAplicacaoId, status])
+  @@index([empresaId, solicitanteVinculoId])
+  @@index([empresaId, ajusteAnteriorId])
+}
+
+// Avaliação identifica exatamente a versão da proposta de ajuste.
+// Snapshot será gerado no servidor; BigInt deve ser representado como string.
+// Pareceres são preservados, sem edição após registro.
+model AvaliacaoAjusteHoras {
+  id                       String                @id @default(uuid()) @db.Uuid
+  empresaId                String                @db.Uuid
+  ajusteId                 String                @db.Uuid
+  avaliadorVinculoId       String                @db.Uuid
+  versaoAjuste              Int
+  decisao                  DecisaoAvaliacaoHoras
+  observacoes              String                @db.Text
+  dadosAjusteSnapshot       Json
+  avaliadoEm               DateTime              @default(now()) @db.Timestamptz(3)
+
+  ajuste AjusteHoras @relation(fields: [empresaId, ajusteId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  avaliador VinculoEmpresa @relation("AvaliadorAjusteHoras", fields: [empresaId, avaliadorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, ajusteId, versaoAjuste, avaliadorVinculoId])
+  @@index([empresaId, avaliadorVinculoId])
+  // Parecer central e avaliação específica serão gravados juntos.
+  // O serviço verificará tipo, objeto, versão, avaliador e decisão.
+  // Somente o parecer central será contado no quórum de aprovação.
+  parecerId String @db.Uuid
+  parecer ParecerAprovacao @relation(fields: [empresaId, parecerId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, parecerId])
+}
+
+
+// BLOCO 11A - CLASSIFICACAO E ORCAMENTO PREVISTO
+
+enum NaturezaFinanceira {
+  RECEITA
+  CUSTO
+  DESPESA
+  TRIBUTO
+}
+
+enum StatusOrcamentoProjeto {
+  RASCUNHO
+  EM_APROVACAO
+  APROVADO
+  REJEITADO
+  CANCELADO
+}
+
+// Classificação gerencial configurável por empresa.
+// Não substitui o plano de contas da contabilidade oficial.
+model CategoriaFinanceira {
+  id           String             @id @default(uuid()) @db.Uuid
+  empresaId    String             @db.Uuid
+  codigo       String             @db.VarChar(80)
+  nome         String             @db.VarChar(160)
+  natureza     NaturezaFinanceira
+  descricao    String?            @db.Text
+  versao       Int                @default(1)
+  criadoEm     DateTime           @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime           @updatedAt @db.Timestamptz(3)
+  arquivadoEm  DateTime?          @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  itensOrcamento ItemOrcamentoProjeto[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, codigo])
+  @@index([empresaId, natureza, arquivadoEm])
+  titulosFinanceiros TituloFinanceiro[]
+}
+
+// Unidade de organização dos custos, independente do projeto.
+model CentroCusto {
+  id           String    @id @default(uuid()) @db.Uuid
+  empresaId    String    @db.Uuid
+  codigo       String    @db.VarChar(80)
+  nome         String    @db.VarChar(160)
+  descricao    String?   @db.Text
+  versao       Int       @default(1)
+  criadoEm     DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime  @updatedAt @db.Timestamptz(3)
+  arquivadoEm  DateTime? @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  itensOrcamento ItemOrcamentoProjeto[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, codigo])
+  titulosFinanceiros TituloFinanceiro[]
+}
+
+// Número identifica a revisão editorial; versao controla concorrência.
+// Orçamento aprovado e seus itens não poderão ser sobrescritos.
+// Cada comparação deverá identificar qual revisão usa como referência.
+model OrcamentoProjeto {
+  id                  String                @id @default(uuid()) @db.Uuid
+  empresaId           String                @db.Uuid
+  projetoId           String                @db.Uuid
+  autorVinculoId      String                @db.Uuid
+  aprovadoPorVinculoId String?              @db.Uuid
+  numero              Int
+  titulo              String                @db.VarChar(200)
+  justificativaRevisao String?               @db.Text
+  moeda               String                @default("BRL") @db.VarChar(3)
+  status              StatusOrcamentoProjeto @default(RASCUNHO)
+  versao              Int                   @default(1)
+  criadoEm            DateTime              @default(now()) @db.Timestamptz(3)
+  atualizadoEm        DateTime              @updatedAt @db.Timestamptz(3)
+  submetidoEm         DateTime?             @db.Timestamptz(3)
+  aprovadoEm          DateTime?             @db.Timestamptz(3)
+
+  projeto Projeto @relation(fields: [empresaId, projetoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  autor VinculoEmpresa @relation("AutorOrcamentoProjeto", fields: [empresaId, autorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  aprovadoPor VinculoEmpresa? @relation("AprovadorOrcamentoProjeto", fields: [empresaId, aprovadoPorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  itens ItemOrcamentoProjeto[]
+
+  @@unique([empresaId, projetoId, id])
+  @@unique([empresaId, projetoId, numero])
+  @@index([empresaId, projetoId, status])
+  @@index([empresaId, autorVinculoId])
+  @@index([empresaId, aprovadoPorVinculoId])
+}
+
+// Valor total previsto da linha, na moeda do orçamento.
+// Quantidade/unidade são opcionais e explicam a composição da previsão.
+// Snapshots preservam a classificação usada na aprovação.
+// Recursos e centros são opcionais; todos devem pertencer à mesma empresa.
+model ItemOrcamentoProjeto {
+  id                    String             @id @default(uuid()) @db.Uuid
+  empresaId             String             @db.Uuid
+  projetoId             String             @db.Uuid
+  orcamentoId           String             @db.Uuid
+  categoriaId           String             @db.Uuid
+  centroCustoId         String?            @db.Uuid
+  recursoId             String?            @db.Uuid
+  descricao             String             @db.Text
+  categoriaNomeSnapshot String             @db.VarChar(160)
+  naturezaSnapshot      NaturezaFinanceira
+  centroCustoNomeSnapshot String?           @db.VarChar(160)
+  quantidadePrevista    Decimal?           @db.Decimal(18, 4)
+  unidadeQuantidade    String?            @db.VarChar(80)
+  valorPrevistoCentavos BigInt
+  dataCompetenciaPrevista DateTime?        @db.Date
+  dataCaixaPrevista     DateTime?          @db.Date
+  ordem                 Int                @default(0)
+  versao                Int                @default(1)
+  criadoEm              DateTime           @default(now()) @db.Timestamptz(3)
+  atualizadoEm          DateTime           @updatedAt @db.Timestamptz(3)
+
+  orcamento OrcamentoProjeto @relation(fields: [empresaId, projetoId, orcamentoId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  categoria CategoriaFinanceira @relation(fields: [empresaId, categoriaId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  centroCusto CentroCusto? @relation(fields: [empresaId, centroCustoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  recurso Recurso? @relation(fields: [empresaId, recursoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, projetoId, id])
+  @@index([empresaId, projetoId, orcamentoId, ordem])
+  @@index([empresaId, categoriaId])
+  @@index([empresaId, centroCustoId])
+  @@index([empresaId, recursoId])
+}
+
+
+// BLOCO 11B - OBRIGACOES E PARCELAS
+
+enum TipoFornecedor {
+  PESSOA_FISICA
+  PESSOA_JURIDICA
+}
+
+enum TipoTituloFinanceiro {
+  PAGAR
+  RECEBER
+}
+
+enum StatusTituloFinanceiro {
+  RASCUNHO
+  EM_APROVACAO
+  APROVADO
+  REJEITADO
+  CANCELADO
+}
+
+enum StatusParcelaFinanceira {
+  ATIVA
+  CANCELADA
+}
+
+model Fornecedor {
+  id                    String         @id @default(uuid()) @db.Uuid
+  empresaId             String         @db.Uuid
+  nome                  String         @db.VarChar(200)
+  tipo                  TipoFornecedor
+  documentoNormalizado  String?        @db.VarChar(20)
+  email                 String?        @db.VarChar(254)
+  telefone              String?        @db.VarChar(30)
+  versao                Int            @default(1)
+  criadoEm              DateTime       @default(now()) @db.Timestamptz(3)
+  atualizadoEm          DateTime       @updatedAt @db.Timestamptz(3)
+  arquivadoEm           DateTime?      @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  titulos TituloFinanceiro[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, documentoNormalizado])
+  @@index([empresaId, nome])
+}
+
+// Obrigação gerencial; não é nota fiscal nem movimento bancário.
+// Projeto opcional permite despesas administrativas da empresa.
+// Um título tem uma categoria/centro: rateios terão estrutura própria.
+// Contraparte, classificação e valor aprovados serão preservados.
+model TituloFinanceiro {
+  id                     String                 @id @default(uuid()) @db.Uuid
+  empresaId              String                 @db.Uuid
+  projetoId              String?                @db.Uuid
+  clienteId              String?                @db.Uuid
+  fornecedorId           String?                @db.Uuid
+  categoriaId            String                 @db.Uuid
+  centroCustoId          String?                @db.Uuid
+  autorVinculoId         String                 @db.Uuid
+  codigo                 String                 @db.VarChar(80)
+  tipo                   TipoTituloFinanceiro
+  status                 StatusTituloFinanceiro @default(RASCUNHO)
+  descricao              String                 @db.Text
+  referenciaDocumento    String?                @db.VarChar(200)
+  contraparteNomeSnapshot String                @db.VarChar(200)
+  categoriaNomeSnapshot  String                 @db.VarChar(160)
+  naturezaSnapshot       NaturezaFinanceira
+  centroCustoNomeSnapshot String?                @db.VarChar(160)
+  moeda                  String                 @default("BRL") @db.VarChar(3)
+  valorPrincipalCentavos BigInt
+  dataCompetencia        DateTime               @db.Date
+  emitidoEm              DateTime?              @db.Date
+  versao                 Int                    @default(1)
+  criadoEm               DateTime               @default(now()) @db.Timestamptz(3)
+  atualizadoEm           DateTime               @updatedAt @db.Timestamptz(3)
+  aprovadoEm             DateTime?              @db.Timestamptz(3)
+  canceladoEm            DateTime?              @db.Timestamptz(3)
+  motivoCancelamento     String?                @db.Text
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  projeto Projeto? @relation(fields: [empresaId, projetoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  cliente Cliente? @relation(fields: [empresaId, clienteId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  fornecedor Fornecedor? @relation(fields: [empresaId, fornecedorId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  categoria CategoriaFinanceira @relation(fields: [empresaId, categoriaId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  centroCusto CentroCusto? @relation(fields: [empresaId, centroCustoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  autor VinculoEmpresa @relation("AutorTituloFinanceiro", fields: [empresaId, autorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  parcelas ParcelaFinanceira[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, codigo])
+  @@index([empresaId, tipo, status, dataCompetencia])
+  @@index([empresaId, projetoId])
+  @@index([empresaId, clienteId])
+  @@index([empresaId, fornecedorId])
+  @@index([empresaId, categoriaId])
+  @@index([empresaId, centroCustoId])
+  @@index([empresaId, autorVinculoId])
+}
+
+// Parcela representa o vencimento, não o recebimento/pagamento.
+// Moeda e natureza são herdadas do título.
+// Pago, parcial e atrasado serão derivados das liquidações e do vencimento.
+// Aprovação exigirá soma das parcelas igual ao principal do título.
+model ParcelaFinanceira {
+  id                     String                   @id @default(uuid()) @db.Uuid
+  empresaId              String                   @db.Uuid
+  tituloId               String                   @db.Uuid
+  numero                 Int
+  vencimento             DateTime                 @db.Date
+  valorPrincipalCentavos BigInt
+  status                 StatusParcelaFinanceira @default(ATIVA)
+  versao                 Int                      @default(1)
+  criadoEm               DateTime                 @default(now()) @db.Timestamptz(3)
+  atualizadoEm           DateTime                 @updatedAt @db.Timestamptz(3)
+  canceladoEm            DateTime?                @db.Timestamptz(3)
+
+  titulo TituloFinanceiro @relation(fields: [empresaId, tituloId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, tituloId, numero])
+  @@index([empresaId, status, vencimento])
+  liquidacoes LiquidacaoFinanceira[]
+}
+
+
+// BLOCO 11C - CONTAS, LIQUIDACOES E ESTORNOS
+
+enum TipoContaFinanceira {
+  BANCARIA
+  CAIXA
+  CARTEIRA_DIGITAL
+}
+
+enum MeioLiquidacaoFinanceira {
+  PIX
+  TRANSFERENCIA
+  BOLETO
+  CARTAO
+  DINHEIRO
+  CHEQUE
+  OUTRO
+}
+
+// Saldo será derivado de movimentações, incluindo estornos.
+// A abertura de saldo e transferências terão registros próprios.
+// Não alterar moeda após a primeira movimentação.
+model ContaFinanceira {
+  id           String              @id @default(uuid()) @db.Uuid
+  empresaId    String              @db.Uuid
+  codigo       String              @db.VarChar(80)
+  nome         String              @db.VarChar(160)
+  tipo         TipoContaFinanceira
+  moeda        String              @default("BRL") @db.VarChar(3)
+  instituicao  String?             @db.VarChar(160)
+  ativo        Boolean             @default(true)
+  versao       Int                 @default(1)
+  criadoEm     DateTime            @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime            @updatedAt @db.Timestamptz(3)
+  arquivadoEm  DateTime?           @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  liquidacoes LiquidacaoFinanceira[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, codigo])
+  aberturasSaldo AberturaSaldoConta[]
+  transferenciasSaida TransferenciaFinanceira[] @relation("ContaOrigemTransferencia")
+  transferenciasEntrada TransferenciaFinanceira[] @relation("ContaDestinoTransferencia")
+}
+
+// Registro de uma movimentação efetivamente confirmada.
+// Uma parcela pode ter várias liquidações parciais.
+// Principal liquidado é o valor nominal extinto da parcela.
+// Caixa = principal + juros + multa - desconto.
+// Tarifas bancárias serão lançadas como despesas próprias.
+// Conta e título devem ter a mesma moeda nesta primeira implementação.
+// Registros confirmados serão imutáveis; correções exigem estorno.
+model LiquidacaoFinanceira {
+  id                       String                   @id @default(uuid()) @db.Uuid
+  empresaId                String                   @db.Uuid
+  parcelaId                String                   @db.Uuid
+  contaId                  String                   @db.Uuid
+  autorVinculoId           String                   @db.Uuid
+  chaveIdempotencia        String                   @db.VarChar(100)
+  meio                     MeioLiquidacaoFinanceira
+  principalCentavos        BigInt
+  jurosCentavos            BigInt                   @default(0)
+  multaCentavos            BigInt                   @default(0)
+  descontoCentavos         BigInt                   @default(0)
+  valorMovimentadoCentavos  BigInt
+  moedaSnapshot            String                   @db.VarChar(3)
+  tipoTituloSnapshot       TipoTituloFinanceiro
+  referenciaExterna        String?                  @db.VarChar(200)
+  observacoes              String?                  @db.Text
+  movimentadoEm            DateTime                 @db.Timestamptz(3)
+  dataCaixa                DateTime                 @db.Date
+  registradoEm             DateTime                 @default(now()) @db.Timestamptz(3)
+
+  parcela ParcelaFinanceira @relation(fields: [empresaId, parcelaId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  conta ContaFinanceira @relation(fields: [empresaId, contaId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  autor VinculoEmpresa @relation("AutorLiquidacaoFinanceira", fields: [empresaId, autorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  estorno EstornoLiquidacaoFinanceira?
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, chaveIdempotencia])
+  @@index([empresaId, parcelaId, movimentadoEm])
+  @@index([empresaId, contaId, dataCaixa])
+  @@index([empresaId, autorVinculoId])
+}
+
+// Compensa integralmente uma liquidação, sem editar ou apagar a origem.
+// Conta, moeda e valores são derivados da liquidação original.
+// No máximo um estorno por liquidação.
+// Corrigir parcialmente exige estorno integral e nova liquidação correta.
+// Estorno exige confirmação da reversão e autorização no servidor.
+// Registros serão imutáveis.
+model EstornoLiquidacaoFinanceira {
+  id                String   @id @default(uuid()) @db.Uuid
+  empresaId         String   @db.Uuid
+  liquidacaoId      String   @db.Uuid
+  autorVinculoId    String   @db.Uuid
+  chaveIdempotencia String   @db.VarChar(100)
+  justificativa     String   @db.Text
+  referenciaExterna String?  @db.VarChar(200)
+  movimentadoEm     DateTime @db.Timestamptz(3)
+  dataCaixa         DateTime @db.Date
+  registradoEm      DateTime @default(now()) @db.Timestamptz(3)
+
+  liquidacao LiquidacaoFinanceira @relation(fields: [empresaId, liquidacaoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  autor VinculoEmpresa @relation("AutorEstornoLiquidacaoFinanceira", fields: [empresaId, autorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, liquidacaoId])
+  @@unique([empresaId, chaveIdempotencia])
+  @@index([empresaId, dataCaixa])
+  @@index([empresaId, autorVinculoId])
+}
+
+
+// BLOCO 11D - ABERTURA DE SALDO E TRANSFERENCIAS
+
+// Saldo existente imediatamente antes das movimentações da dataInicioControle.
+// Valor assinado: positivo, zero ou negativo.
+// Não constitui receita, despesa ou movimentação ocorrida nessa data.
+// Apenas uma abertura não estornada por conta, garantida pelo serviço.
+// Correção exige estornar a abertura anterior e registrar outra.
+// Abertura e estorno serão imutáveis.
+model AberturaSaldoConta {
+  id                String   @id @default(uuid()) @db.Uuid
+  empresaId         String   @db.Uuid
+  contaId           String   @db.Uuid
+  autorVinculoId    String   @db.Uuid
+  chaveIdempotencia String   @db.VarChar(100)
+  saldoCentavos     BigInt
+  moedaSnapshot     String   @db.VarChar(3)
+  dataInicioControle DateTime @db.Date
+  justificativa     String   @db.Text
+  registradoEm      DateTime @default(now()) @db.Timestamptz(3)
+
+  conta ContaFinanceira @relation(fields: [empresaId, contaId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  autor VinculoEmpresa @relation("AutorAberturaSaldo", fields: [empresaId, autorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  estorno EstornoAberturaSaldo?
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, chaveIdempotencia])
+  @@index([empresaId, contaId, dataInicioControle])
+  @@index([empresaId, autorVinculoId])
+}
+
+// Invalida a abertura original para cálculo do saldo.
+// Não representa dinheiro entrando ou saindo da conta.
+// Histórico mantém tanto a abertura quanto sua invalidação.
+model EstornoAberturaSaldo {
+  id                String   @id @default(uuid()) @db.Uuid
+  empresaId         String   @db.Uuid
+  aberturaId        String   @db.Uuid
+  autorVinculoId    String   @db.Uuid
+  chaveIdempotencia String   @db.VarChar(100)
+  justificativa     String   @db.Text
+  registradoEm      DateTime @default(now()) @db.Timestamptz(3)
+
+  abertura AberturaSaldoConta @relation(fields: [empresaId, aberturaId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  autor VinculoEmpresa @relation("AutorEstornoAberturaSaldo", fields: [empresaId, autorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, aberturaId])
+  @@unique([empresaId, chaveIdempotencia])
+  @@index([empresaId, autorVinculoId])
+}
+
+// Transferência efetivamente confirmada, entre contas da mesma empresa.
+// Um registro representa a saída da origem e a entrada no destino.
+// Contas distintas, mesma moeda e valor positivo serão exigidos.
+// Não gera receita ou despesa; tarifas são despesas próprias.
+// Transferências com câmbio exigirão modelagem específica.
+// Registro será imutável.
+model TransferenciaFinanceira {
+  id                String   @id @default(uuid()) @db.Uuid
+  empresaId         String   @db.Uuid
+  contaOrigemId     String   @db.Uuid
+  contaDestinoId    String   @db.Uuid
+  autorVinculoId    String   @db.Uuid
+  chaveIdempotencia String   @db.VarChar(100)
+  valorCentavos     BigInt
+  moedaSnapshot     String   @db.VarChar(3)
+  descricao         String   @db.Text
+  referenciaExterna String?  @db.VarChar(200)
+  movimentadoEm     DateTime @db.Timestamptz(3)
+  dataCaixa         DateTime @db.Date
+  registradoEm      DateTime @default(now()) @db.Timestamptz(3)
+
+  contaOrigem ContaFinanceira @relation("ContaOrigemTransferencia", fields: [empresaId, contaOrigemId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  contaDestino ContaFinanceira @relation("ContaDestinoTransferencia", fields: [empresaId, contaDestinoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  autor VinculoEmpresa @relation("AutorTransferenciaFinanceira", fields: [empresaId, autorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  estorno EstornoTransferenciaFinanceira?
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, chaveIdempotencia])
+  @@index([empresaId, contaOrigemId, dataCaixa])
+  @@index([empresaId, contaDestinoId, dataCaixa])
+  @@index([empresaId, autorVinculoId])
+}
+
+// Reversão integral efetivamente confirmada.
+// Contas, moeda e valor são derivados da transferência original.
+// Compensa as duas contas na data do estorno.
+// No máximo um estorno por transferência.
+// Correções exigem estorno e nova transferência.
+// Registro será imutável.
+model EstornoTransferenciaFinanceira {
+  id                String   @id @default(uuid()) @db.Uuid
+  empresaId         String   @db.Uuid
+  transferenciaId  String   @db.Uuid
+  autorVinculoId    String   @db.Uuid
+  chaveIdempotencia String   @db.VarChar(100)
+  justificativa     String   @db.Text
+  referenciaExterna String?  @db.VarChar(200)
+  movimentadoEm     DateTime @db.Timestamptz(3)
+  dataCaixa         DateTime @db.Date
+  registradoEm      DateTime @default(now()) @db.Timestamptz(3)
+
+  transferencia TransferenciaFinanceira @relation(fields: [empresaId, transferenciaId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  autor VinculoEmpresa @relation("AutorEstornoTransferenciaFinanceira", fields: [empresaId, autorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, transferenciaId])
+  @@unique([empresaId, chaveIdempotencia])
+  @@index([empresaId, dataCaixa])
+  @@index([empresaId, autorVinculoId])
+}
+
+
+// COMPLEMENTO - DOCUMENTOS DAS SUBMISSOES DE ENTREGAVEIS
+
+// Referencia o arquivo exato entregue, preservando seu histórico.
+// As duas relações exigem a mesma empresa e o mesmo projeto.
+// O serviço aceitará somente arquivos DISPONIVEL.
+// Submissão e anexos serão registrados na mesma transação.
+// Após submissão, os vínculos serão imutáveis.
+// Correções exigem nova submissão.
+model AnexoSubmissaoEntregavel {
+  empresaId         String   @db.Uuid
+  projetoId         String   @db.Uuid
+  submissaoId       String   @db.Uuid
+  versaoDocumentoId String   @db.Uuid
+  criadoEm          DateTime @default(now()) @db.Timestamptz(3)
+
+  submissao SubmissaoEntregavel @relation(fields: [empresaId, projetoId, submissaoId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+  documento VersaoDocumento @relation(fields: [empresaId, projetoId, versaoDocumentoId], references: [empresaId, projetoId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([empresaId, projetoId, submissaoId, versaoDocumentoId])
+  @@index([empresaId, projetoId, versaoDocumentoId])
+}
+
+
+// BLOCO 12A - POLITICAS CONFIGURAVEIS DE APROVACAO
+
+enum TipoObjetoAprovacao {
+  ENTREGAVEL
+  ATA
+  APONTAMENTO_HORAS
+  AJUSTE_HORAS
+  ORCAMENTO_PROJETO
+  TITULO_FINANCEIRO
+  LIQUIDACAO_FINANCEIRA
+  ESTORNO_FINANCEIRO
+  TRANSFERENCIA_FINANCEIRA
+  ABERTURA_SALDO
+}
+
+// Cada registro representa uma revisão da política.
+// Publicada: regras e perfis aprovadores serão imutáveis.
+// Mudanças exigem nova revisão.
+// Encerramento impede uso em novas solicitações, preservando o histórico.
+// Publicação e encerramento da revisão anterior serão atômicos.
+// Apenas uma revisão publicada e não encerrada por empresa/tipo/moeda.
+// Essa exclusividade será reforçada na migração e no serviço.
+model PoliticaAprovacao {
+  id                       String              @id @default(uuid()) @db.Uuid
+  empresaId                String              @db.Uuid
+  autorVinculoId           String              @db.Uuid
+  publicadoPorVinculoId    String?             @db.Uuid
+  tipo                     TipoObjetoAprovacao
+  numero                   Int
+  nome                     String              @db.VarChar(160)
+  descricao                String?             @db.Text
+  moeda                    String?             @db.VarChar(3)
+  minimoAprovadores        Int                 @default(1)
+  permitirAutoaprovacao    Boolean             @default(false)
+  exigirTodosPerfis        Boolean             @default(false)
+  versao                   Int                 @default(1)
+  criadoEm                 DateTime            @default(now()) @db.Timestamptz(3)
+  atualizadoEm             DateTime            @updatedAt @db.Timestamptz(3)
+  publicadoEm              DateTime?           @db.Timestamptz(3)
+  encerradoEm              DateTime?           @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  autor VinculoEmpresa @relation("AutorPoliticaAprovacao", fields: [empresaId, autorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  publicadoPor VinculoEmpresa? @relation("PublicadorPoliticaAprovacao", fields: [empresaId, publicadoPorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  perfisAprovadores PerfilAprovadorPolitica[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, tipo, numero])
+  @@index([empresaId, tipo, moeda, publicadoEm, encerradoEm])
+  @@index([empresaId, autorVinculoId])
+  @@index([empresaId, publicadoPorVinculoId])
+  solicitacoes SolicitacaoAprovacao[]
+  @@unique([empresaId, tipo, id])
+}
+
+// Perfil elegível não concede acesso por si só:
+// também exige permissão de aprovação, vínculo e perfil ativos.
+// Limite nulo representa ausência de teto financeiro para esse perfil.
+// Limites financeiros exigem moeda na política.
+// O teto se aplica ao valor total submetido, nunca só à parcela do avaliador.
+// Uma pessoa conta uma única vez, mesmo tendo vários perfis.
+// Quando exigirTodosPerfis=true, cada perfil exigirá um aprovador distinto.
+// Publicação verificará se essa combinação é viável.
+model PerfilAprovadorPolitica {
+  empresaId          String   @db.Uuid
+  politicaId         String   @db.Uuid
+  perfilId           String   @db.Uuid
+  limiteValorCentavos BigInt?
+  criadoEm           DateTime @default(now()) @db.Timestamptz(3)
+
+  politica PoliticaAprovacao @relation(fields: [empresaId, politicaId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  perfil Perfil @relation(fields: [empresaId, perfilId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([empresaId, politicaId, perfilId])
+  @@index([empresaId, perfilId])
+}
+
+
+// BLOCO 12B - SOLICITACOES E PARECERES DE APROVACAO
+
+enum StatusSolicitacaoAprovacao {
+  PENDENTE
+  APROVADA
+  AJUSTES_SOLICITADOS
+  REJEITADA
+  CANCELADA
+  EXPIRADA
+}
+
+enum DecisaoParecerAprovacao {
+  APROVAR
+  SOLICITAR_AJUSTES
+  REJEITAR
+}
+
+// Conteúdo e política são congelados na criação da solicitação.
+// Alteração do conteúdo exige cancelar/substituir a solicitação.
+// Política deve estar publicada e vigente na criação.
+// Relação composta exige política da mesma empresa e do mesmo tipo.
+//
+// entidadeId identifica o objeto existente conforme o tipo:
+// ENTREGAVEL referencia uma SubmissaoEntregavel;
+// ATA referencia uma VersaoAta; demais tipos seguem seu serviço.
+// Para operações ainda não executadas, entidadeId pode ser nulo:
+// a proposta completa fica em dadosObjetoSnapshot.
+//
+// Referência polimórfica: existência, empresa e projeto do objeto
+// deverão ser verificados pelo serviço; entidadeId não possui FK.
+//
+// APROVADA não significa que uma operação externa foi executada.
+// Aplicação da aprovação verifica versão/conteúdo e direitos atuais.
+// Snapshots não devem conter senhas, tokens ou credenciais.
+model SolicitacaoAprovacao {
+  id                    String                       @id @default(uuid()) @db.Uuid
+  empresaId             String                       @db.Uuid
+  projetoId             String?                      @db.Uuid
+  politicaId            String                       @db.Uuid
+  solicitanteVinculoId  String                       @db.Uuid
+  tipo                  TipoObjetoAprovacao
+  entidadeId            String?                      @db.Uuid
+  versaoObjeto          Int?
+  chaveIdempotencia     String                       @db.VarChar(100)
+  dadosObjetoSnapshot   Json
+  politicaSnapshot      Json
+  hashConteudo          String                       @db.VarChar(64)
+  valorReferenciaCentavos BigInt?
+  moeda                 String?                      @db.VarChar(3)
+  status                StatusSolicitacaoAprovacao    @default(PENDENTE)
+  justificativa         String?                      @db.Text
+  versao                Int                          @default(1)
+  criadoEm              DateTime                     @default(now()) @db.Timestamptz(3)
+  atualizadoEm          DateTime                     @updatedAt @db.Timestamptz(3)
+  expiraEm              DateTime?                    @db.Timestamptz(3)
+  decididoEm            DateTime?                    @db.Timestamptz(3)
+  canceladoEm           DateTime?                    @db.Timestamptz(3)
+  motivoCancelamento    String?                      @db.Text
+  aplicadoEm            DateTime?                    @db.Timestamptz(3)
+  entidadeResultadoId   String?                      @db.Uuid
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  projeto Projeto? @relation(fields: [empresaId, projetoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  politica PoliticaAprovacao @relation(fields: [empresaId, tipo, politicaId], references: [empresaId, tipo, id], onDelete: Restrict, onUpdate: Restrict)
+  solicitante VinculoEmpresa @relation("AutorSolicitacaoAprovacao", fields: [empresaId, solicitanteVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  pareceres ParecerAprovacao[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, chaveIdempotencia])
+  @@index([empresaId, status, criadoEm])
+  @@index([empresaId, tipo, entidadeId])
+  @@index([empresaId, projetoId, status])
+  @@index([empresaId, tipo, politicaId])
+  @@index([empresaId, solicitanteVinculoId])
+}
+
+// Parecer definitivo de um usuário sobre o conteúdo congelado.
+// Apenas um parecer por vínculo em cada solicitação.
+// Correções do processo geram nova solicitação, preservando os pareceres.
+// Perfil e alçada usados são registrados no snapshot pelo servidor.
+// Verificar vínculo, perfil, atribuição, permissão e escopo vigentes.
+// Para horas, bloquear autoaprovação também pelo recurso beneficiário,
+// mesmo quando o lançamento foi realizado por outra pessoa.
+// Pareceres específicos dos módulos serão vinculados/sincronizados
+// pelo serviço na mesma transação, sem contagem dupla.
+model ParecerAprovacao {
+  id                    String                   @id @default(uuid()) @db.Uuid
+  empresaId             String                   @db.Uuid
+  solicitacaoId         String                   @db.Uuid
+  avaliadorVinculoId    String                   @db.Uuid
+  perfilId              String                   @db.Uuid
+  decisao               DecisaoParecerAprovacao
+  observacoes           String                   @db.Text
+  autorizacaoSnapshot   Json
+  avaliadoEm            DateTime                 @default(now()) @db.Timestamptz(3)
+
+  solicitacao SolicitacaoAprovacao @relation(fields: [empresaId, solicitacaoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  avaliador VinculoEmpresa @relation("AutorParecerAprovacao", fields: [empresaId, avaliadorVinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  perfil Perfil @relation(fields: [empresaId, perfilId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, solicitacaoId, avaliadorVinculoId])
+  @@index([empresaId, avaliadorVinculoId, avaliadoEm])
+  @@index([empresaId, perfilId])
+  avaliacaoEntregavel AvaliacaoEntregavel?
+  avaliacaoAta AvaliacaoAta?
+  avaliacaoHoras AvaliacaoHoras?
+  avaliacaoAjusteHoras AvaliacaoAjusteHoras?
+  @@unique([empresaId, id])
+}
+
+
+// INFRAESTRUTURA - CONTROLE DE TENTATIVAS DE LOGIN
+// Compartilhado entre instâncias da aplicação.
+// chaveHash será derivada com HMAC no servidor.
+// Nunca armazenar senha, token ou email nesta tabela.
+// Contagem e renovação da janela serão atômicas.
+// Falhas do controle impedirão o login e serão registradas.
+// Registros expirados poderão ser removidos pela rotina de limpeza.
+model LimiteTentativaLogin {
+  chaveHash    String   @id @db.VarChar(64)
+  inicioJanela DateTime @db.Timestamptz(3)
+  fimJanela    DateTime @db.Timestamptz(3)
+  tentativas   Int      @default(1)
+  atualizadoEm DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([fimJanela])
+}
+
+
+// AUTENTICACAO - RECUPERACAO DE ACESSO
+// Token aleatório enviado por e-mail; somente seu SHA256 será armazenado.
+// Validade de 30 minutos será definida pelo serviço.
+// Uso único e alteração da senha serão realizados na mesma transação.
+// A versão de sessão impede o uso após outra troca de senha.
+// A recuperação altera a conta global do usuário.
+// Empresa e vínculo identificam o contexto da solicitação.
+// Nunca registrar token, link completo ou senha nos logs.
+model RecuperacaoAcesso {
+  id                   String    @id @default(uuid()) @db.Uuid
+  empresaId            String    @db.Uuid
+  vinculoId            String    @db.Uuid
+  tokenHash            String    @unique @db.VarChar(64)
+  versaoSessaoNaEmissao Int
+  criadoEm             DateTime  @default(now()) @db.Timestamptz(3)
+  expiraEm             DateTime  @db.Timestamptz(3)
+  enviadoEm            DateTime? @db.Timestamptz(3)
+  utilizadoEm          DateTime? @db.Timestamptz(3)
+  revogadoEm           DateTime? @db.Timestamptz(3)
+
+  vinculo VinculoEmpresa @relation(fields: [empresaId, vinculoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([empresaId, vinculoId, criadoEm])
+  @@index([expiraEm])
+}

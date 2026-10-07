@@ -1,0 +1,13 @@
+
+
+# Ambiente e arquivos gerados do MProj
+.env*
+!.env.example
+node_modules/
+.next/
+src/generated/prisma/
+*.bak-*
+
+# Ferramenta de análise
+__pycache__/
+tools/analisador/relatorios/

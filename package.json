@@ -1,0 +1,39 @@
+{
+  "name": "mproj-sistema",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "next dev --hostname 127.0.0.1",
+    "build": "prisma generate --config prisma.config.ts && next build",
+    "start": "next start --hostname 127.0.0.1",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "dotenv": "17.2.3",
+    "next": "16.3.8",
+    "pg": "8.16.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "resend": "6.32.0"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "prisma": "7.10.0",
+    "typescript": "5.9.3"
+  }
+}
