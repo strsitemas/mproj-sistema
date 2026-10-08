@@ -11,3 +11,5 @@ src/generated/prisma/
 # Ferramenta de análise
 __pycache__/
 tools/analisador/relatorios/
+
+*.tsbuildinfo
