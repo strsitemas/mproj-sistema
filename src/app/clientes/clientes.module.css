@@ -1,0 +1,111 @@
+.pagina {
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--tx);
+}
+
+.conteudo {
+  width: 100%;
+  max-width: 620px;
+  margin: 0;
+}
+
+.cabecalho {
+  margin-bottom: 16px;
+}
+
+.titulo {
+  margin: 0 0 4px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--tx);
+}
+
+.descricao {
+  margin: 0 0 18px;
+  color: var(--mu);
+  font-size: 13px;
+}
+
+.cartao {
+  padding: 22px;
+  border: 1px solid var(--bd);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.formulario {
+  display: grid;
+  gap: 13px;
+}
+
+.campo {
+  display: grid;
+  gap: 5px;
+}
+
+.rotulo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tx);
+}
+
+.entrada {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--tx);
+  font: inherit;
+}
+
+.entrada:focus {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.botao {
+  justify-self: start;
+  min-height: 38px;
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--teal);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.botao:hover {
+  filter: brightness(1.08);
+}
+
+.botao:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sucesso {
+  color: var(--teal);
+}
+
+.erro {
+  color: #e36b76;
+}
+
+@media (max-width: 600px) {
+  .cartao {
+    padding: 16px;
+  }
+
+  .titulo {
+    font-size: 23px;
+  }
+}

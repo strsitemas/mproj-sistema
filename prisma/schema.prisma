@@ -53,6 +53,9 @@ model Empresa {
   contasFinanceiras ContaFinanceira[]
   politicasAprovacao PoliticaAprovacao[]
   solicitacoesAprovacao SolicitacaoAprovacao[]
+  contadorCodigoCliente ContadorCodigoCliente?
+  propostasComerciais PropostaComercial[]
+  contadorCodigoProposta ContadorCodigoProposta?
 }
 
 // Identidade de login; não representa automaticamente um recurso humano.
@@ -368,6 +371,7 @@ enum PapelParticipacaoProjeto {
 model Cliente {
   id                 String      @id @default(uuid()) @db.Uuid
   empresaId          String      @db.Uuid
+  codigo             String     @db.VarChar(80)
   nome               String      @db.VarChar(200)
   tipo               TipoCliente
   documentoNormalizado String?   @db.VarChar(20)
@@ -382,10 +386,13 @@ model Cliente {
   contratos Contrato[]
   projetos  Projeto[] @relation("ClienteProjeto")
 
+  @@unique([empresaId, codigo])
   @@unique([empresaId, id])
   @@unique([empresaId, documentoNormalizado])
   @@index([empresaId, nome])
   titulosFinanceiros TituloFinanceiro[]
+  contadorCodigoProjeto ContadorCodigoProjeto?
+  propostasComerciais PropostaComercial[]
 }
 
 // Valores opcionais no rascunho; preenchimento exigido conforme modalidade.
@@ -461,6 +468,7 @@ model Projeto {
   orcamentos OrcamentoProjeto[]
   titulosFinanceiros TituloFinanceiro[]
   solicitacoesAprovacao SolicitacaoAprovacao[]
+  propostaOrigem PropostaComercial?
 }
 
 // Papel no projeto descreve a função, sem substituir as permissões do perfil.
@@ -2152,4 +2160,81 @@ model RecuperacaoAcesso {
 
   @@index([empresaId, vinculoId, criadoEm])
   @@index([expiraEm])
+}
+
+model ContadorCodigoCliente {
+  empresaId    String @id @db.Uuid
+  ultimoNumero Int    @default(0)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+}
+
+model ContadorCodigoProjeto {
+  clienteId    String @id @db.Uuid
+  ultimoNumero Int    @default(0)
+
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+}
+
+enum StatusPropostaComercial {
+  RASCUNHO
+  ENVIADA
+  APROVADA
+  REJEITADA
+  CANCELADA
+}
+
+model PropostaComercial {
+  id                   String @id @default(uuid()) @db.Uuid
+  empresaId            String @db.Uuid
+  clienteId            String @db.Uuid
+  projetoId            String? @db.Uuid
+  codigo               String @db.VarChar(80)
+  titulo               String @db.VarChar(200)
+  descricao            String? @db.Text
+  status               StatusPropostaComercial @default(RASCUNHO)
+  moeda                String @default("BRL") @db.VarChar(3)
+  valorTotalCentavos   BigInt @default(0)
+  aprovadoPorVinculoId String? @db.Uuid
+  aprovadoEm           DateTime? @db.Timestamptz(3)
+  convertidoEm         DateTime? @db.Timestamptz(3)
+  versao               Int @default(1)
+  criadoEm             DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm         DateTime @updatedAt @db.Timestamptz(3)
+  arquivadoEm          DateTime? @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  cliente Cliente @relation(fields: [empresaId, clienteId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  projeto Projeto? @relation(fields: [empresaId, projetoId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  itens ItemPropostaComercial[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, codigo])
+  @@unique([empresaId, projetoId])
+  @@index([empresaId, clienteId, status])
+}
+
+model ItemPropostaComercial {
+  id                 String @id @default(uuid()) @db.Uuid
+  empresaId          String @db.Uuid
+  propostaId         String @db.Uuid
+  descricao          String @db.VarChar(300)
+  tipoProfissional   String? @db.VarChar(160)
+  horasPrevistas     Decimal @db.Decimal(18, 2)
+  valorHoraCentavos  BigInt
+  valorTotalCentavos BigInt
+  ordem              Int @default(0)
+  criadoEm           DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm       DateTime @updatedAt @db.Timestamptz(3)
+
+  proposta PropostaComercial @relation(fields: [empresaId, propostaId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([empresaId, propostaId, ordem])
+}
+
+model ContadorCodigoProposta {
+  empresaId    String @id @db.Uuid
+  ultimoNumero Int    @default(0)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 }
