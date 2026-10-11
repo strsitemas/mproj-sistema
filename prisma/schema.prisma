@@ -56,6 +56,9 @@ model Empresa {
   contadorCodigoCliente ContadorCodigoCliente?
   propostasComerciais PropostaComercial[]
   contadorCodigoProposta ContadorCodigoProposta?
+  categoriasServico CategoriaServico[]
+  disciplinasServico DisciplinaServico[]
+  servicosCatalogo Servico[]
 }
 
 // Identidade de login; não representa automaticamente um recurso humano.
@@ -1932,6 +1935,7 @@ model AnexoSubmissaoEntregavel {
 // BLOCO 12A - POLITICAS CONFIGURAVEIS DE APROVACAO
 
 enum TipoObjetoAprovacao {
+  SERVICO
   ENTREGAVEL
   ATA
   APONTAMENTO_HORAS
@@ -2237,4 +2241,67 @@ model ContadorCodigoProposta {
   ultimoNumero Int    @default(0)
 
   empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+}
+
+
+// CP-17.11.1 - CATALOGO UNICO DE SERVICOS
+
+enum StatusServicoCatalogo {
+  PENDENTE
+  APROVADO
+  REJEITADO
+  INATIVO
+}
+
+model CategoriaServico {
+  id String @id @default(uuid()) @db.Uuid
+  empresaId String @db.Uuid
+  nome String @db.VarChar(160)
+  ativo Boolean @default(true)
+  criadoEm DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  servicos Servico[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, nome])
+}
+
+model DisciplinaServico {
+  id String @id @default(uuid()) @db.Uuid
+  empresaId String @db.Uuid
+  nome String @db.VarChar(160)
+  ativo Boolean @default(true)
+  criadoEm DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  servicos Servico[]
+
+  @@unique([empresaId, id])
+  @@unique([empresaId, nome])
+}
+
+model Servico {
+  id String @id @default(uuid()) @db.Uuid
+  empresaId String @db.Uuid
+  categoriaId String @db.Uuid
+  disciplinaId String? @db.Uuid
+  nome String @db.VarChar(200)
+  descricao String? @db.Text
+  status StatusServicoCatalogo @default(PENDENTE)
+  ativo Boolean @default(false)
+  versao Int @default(1)
+  criadoEm DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  categoria CategoriaServico @relation(fields: [empresaId, categoriaId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+  disciplina DisciplinaServico? @relation(fields: [empresaId, disciplinaId], references: [empresaId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([empresaId, id])
+  @@index([empresaId, status, ativo])
+  @@index([empresaId, categoriaId])
+  @@index([empresaId, disciplinaId])
 }
